@@ -11,6 +11,8 @@ import (
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/client"
 	"github.com/pkg/errors"
+	"github.com/rancher/agent/cloudprovider"
+	"github.com/rancher/agent/cloudprovider/aws"
 	"github.com/rancher/agent/core/hostInfo"
 	"github.com/rancher/agent/model"
 	"github.com/rancher/agent/utilities/config"
@@ -65,6 +67,17 @@ func addResource(ping *revents.Event, pong *model.PingResponse, dockerClient *cl
 	if err != nil {
 		return errors.Wrap(err, constants.AddResourceError+"failed to get docker UUID")
 	}
+	providerHostname := ""
+	if config.DetectCloudProvider() {
+		awsProvider := &aws.Provider{}
+		if provider := cloudprovider.GetProviderByName(aws.AwsTag); provider != nil {
+			awsProvider = provider.(*aws.Provider)
+			if providerHostname, err = awsProvider.GetHostLocalProviderHostname(); err != nil {
+				logrus.Warnf("Failed to get Host AWS local-hostname: %v", err.Error())
+			}
+		}
+	}
+
 	compute := model.PingResource{
 		Type:             "host",
 		Kind:             "docker",
@@ -75,6 +88,7 @@ func addResource(ping *revents.Event, pong *model.PingResponse, dockerClient *cl
 		PhysicalHostUUID: physicalHost.UUID,
 		Info:             stats,
 		APIProxy:         config.HostProxy(),
+		ProviderHostname: providerHostname,
 	}
 
 	if memOverride := getResourceOverride("CATTLE_MEMORY_OVERRIDE"); memOverride != 0 {
